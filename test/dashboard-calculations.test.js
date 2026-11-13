@@ -57,3 +57,22 @@ test('partial and full repayments reduce spent without changing normal expenses'
   assert.equal(totals.remainingBudget, 14900);
   assert.equal(totals.normalExpenses, 100);
 });
+
+test('Borrowed To expense rows appear as lending without double counting linked records', () => {
+  const totals = calculateDashboardTotals({
+    budget: 2000,
+    expenses: [
+      { title: 'Groceries', category: 'Food', amount: 100, date: '2026-01-10' },
+      { title: 'Asha', category: 'Borrowed To', amount: 500, date: '2025-12-20' },
+      { title: 'Ravi', category: 'Borrowed To', amount: 300, date: '2026-01-05' }
+    ],
+    borrowed: [
+      { personName: 'Ravi', amount: 300, amountRepaid: 100, date: '2026-01-05' }
+    ]
+  }, 1, 2026);
+
+  assert.equal(totals.normalExpenses, 100);
+  assert.equal(totals.outstandingLending, 700);
+  assert.equal(totals.totalSpent, 800);
+  assert.equal(totals.expenseCount, 1);
+});
