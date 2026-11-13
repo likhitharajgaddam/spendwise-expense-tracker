@@ -6,7 +6,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const CATEGORIES = new Set(['Food', 'Travel', 'Shopping', 'Education', 'Entertainment', 'Bills', 'Healthcare', 'Others']);
+const CATEGORIES = new Set(['Food', 'Travel', 'Shopping', 'Education', 'Entertainment', 'Bills', 'Healthcare', 'Others', 'Borrowed To']);
 const METHODS = new Set(['Cash', 'UPI', 'Card']);
 const STATUSES = new Set(['Pending', 'Partially Repaid', 'Repaid']);
 const now = () => new Date();
