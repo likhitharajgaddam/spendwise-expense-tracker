@@ -1,32 +1,48 @@
 # SpendWise — Personal Expense Tracker
 
-A responsive full-stack expense and lending tracker built with React, Tailwind CSS, Express, SQLite (`better-sqlite3`), Recharts, Lucide, and Framer Motion. Account passwords are hashed with bcrypt; API access uses signed JWTs. All financial records are stored in SQLite and scoped to the authenticated account.
+SpendWise is a React/Vite and Express personal expense and lending tracker. It uses PostgreSQL (`pg`), bcrypt password hashing, JWT authentication, and user-scoped database queries. The app's current features include registration/login, profile editing, monthly budgets, expense transactions, and money lent to others with repayments.
 
-## Run locally
+## Local setup
 
-1. Install Node.js 20 or newer.
-2. Install packages with `npm install`.
-3. Optionally copy `.env.example` to `.env`. Local development generates and persists a random JWT secret beside the SQLite database if `JWT_SECRET` is blank; set your own secret when desired. Keep `DB_PATH=./data/spendwise.db` or choose another local path.
-4. Run `npm run dev` and open http://localhost:5173. The API listens on `http://localhost:5001` by default.
+Requirements: Node.js 20+ and a PostgreSQL database. A free Neon database works for development.
 
-The API creates the database directory and tables at startup. `data/spendwise.db` is the default local database; do not commit the database file. The JWT is kept in browser local storage for session continuity, but financial records are stored only in SQLite.
+1. Install dependencies: `npm ci`
+2. Copy `.env.example` to `.env` and set `DATABASE_URL` to a PostgreSQL connection string (for Neon, use the pooled connection string with `sslmode=require`). Set a long random `JWT_SECRET`.
+3. Start both development servers: `npm run dev`
+4. Open http://localhost:5173. Express listens on port 5001 by default; Vite proxies `/api` to it.
 
-## Render: single web service with persistent SQLite
+The API creates the tables and indexes on startup. `npm run build` builds the frontend, and `npm start` runs the production Express server, which serves `dist/` and `/api` from the same origin. You can override `PORT`, `CLIENT_ORIGIN`, and `DATABASE_URL` through the environment. Never commit `.env` or database credentials.
 
-This repository includes `render.yaml`. Connect the repository to Render and create the Blueprint service, or configure an existing Node web service with:
+## Migrating existing SQLite data
 
-- **Build command:** `npm install && npm run build`
-- **Start command:** `npm start`
-- **Health check path:** `/api/health`
-- **Environment:** `NODE_ENV=production`, `DB_PATH=/var/data/spendwise.db`, and a private long random `JWT_SECRET`.
-- **Persistent Disk:** mount path `/var/data`, disk size 1 GB. The database file is `/var/data/spendwise.db`.
+The migration utility reads the existing `data/spendwise.db` in read-only mode and copies users, budgets, expenses, lent-money records, and repayments into an **empty** PostgreSQL database. It preserves account IDs and password hashes, verifies table counts, and never deletes or modifies the SQLite source.
 
-The Express process serves the built `dist/` frontend and `/api` routes from the same web service. The app listens on Render's `PORT`. Attach the disk to a paid web service; Render's filesystem is otherwise ephemeral. A disk-backed service uses a single instance, and deploys can have brief downtime. See [Render Persistent Disks](https://render.com/docs/disks) and the [Render Blueprint disk settings](https://render.com/docs/blueprint-spec).
+1. Back up `data/spendwise.db` before starting.
+2. Set `DATABASE_URL` to the destination PostgreSQL URL in `.env`.
+3. Run `npm run migrate:sqlite` (or set `SQLITE_SOURCE_PATH` to a different SQLite file).
+4. Review the copied row counts before switching the app to the destination database.
 
-## Database tables
+The script refuses a non-empty PostgreSQL destination and refuses to proceed if the source contains unknown **populated** tables, so it cannot silently discard those records. Keep the SQLite backup until you verify the migration. The current repository's schema contains lending records (money lent to others), but has no income table or borrowed-from-others table; any populated additional table will stop migration and require a tailored mapping.
 
-`users`, `budgets`, `expenses`, `borrowed_records`, and `repayments` use foreign keys and parameterized SQL. Repayments are stored separately from expenses, so borrowed amounts never inflate expense totals. User deletion cascades to their records; budget deletion leaves transaction history intact.
+## Deploy to Render Free + Neon
 
-## Existing database records
+1. Create a Neon project and database. In Neon, copy a **pooled** connection string. It must include `sslmode=require`.
+2. Connect this GitHub repository to Render and create the service from `render.yaml` (or create a Node Web Service manually).
+3. Render settings:
+   - Runtime: Node
+   - Plan: Free
+   - Build command: `npm ci --include=dev && npm run build && npm prune --omit=dev`
+   - Start command: `npm start`
+   - Health check path: `/api/health`
+4. Set environment variables in Render:
+   - `DATABASE_URL`: Neon pooled connection string
+   - `JWT_SECRET`: a unique, long random secret (Render Blueprint generates this automatically)
+   - `NODE_ENV`: `production`
+   - `CLIENT_ORIGIN`: omit for same-origin deployment, or set to the exact frontend origin if separately hosted
+5. Deploy. The service creates the PostgreSQL tables during startup and serves the Vite production build. No Render disk or `/var/data` path is used; persistent records live in Neon.
 
-Records in a previous database are not copied automatically. Export or migrate any records you need before switching deployments.
+Render Free web services have an ephemeral filesystem and spin down after periods without traffic. Neon is the persistent database, so application data survives Render restarts and redeploys, subject to Neon plan availability and limits. Render Free instances can take time to wake up after inactivity. No `/var/data` disk configuration is required or supported for this deployment.
+
+## API/data notes
+
+All SQL uses bound parameters. Every record read or mutated is scoped to the authenticated user's ID. Repayments are linked to lent-money records and are excluded from expense totals. PostgreSQL foreign keys cascade account and lending-record deletion. Existing API routes and response field names are retained for the current frontend.
